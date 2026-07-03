@@ -1,7 +1,6 @@
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const TARGET = 'https://bunkerthereval.framer.website';
 
 const STRIP_REQ = [
@@ -57,41 +56,28 @@ const BADGE_PATTERNS = [
   /<script[^>]*>[\s\S]*?(?:__framer-badge|framer-badge|badge\.js|Made\s*in\s*Framer|Made\s*with\s*Framer)[\s\S]*?<\/script>/gi,
 ];
 
-const KILL_CSS = `<style id="killify">#__framer-badge,.framer-badge,[class*="Badge" i],[class*="badge" i],[data-framer-name*="Badge" i],[data-framer-name*="badge" i],[id*="badge" i],a[href*="framer.com"],a[href*="framer.website"],iframe[src*="framer.com"],iframe[src*="framer.website"]{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:fixed!important;left:-99999px!important;top:-99999px!important;width:0!important;height:0!important;z-index:-2147483648!important;clip-path:inset(100%)!important;}
-html,body{overflow:hidden!important;height:100vh!important;max-height:100vh!important}
-*{scrollbar-width:none!important;-ms-overflow-style:none!important}
-::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
-::-webkit-scrollbar-thumb{background:transparent!important;display:none!important}
-::-webkit-scrollbar-track{background:transparent!important;display:none!important}
-div[style*="overflow"]{overflow:hidden!important}
-</style>`;
+const KILL_CSS = '<style id="killify">#__framer-badge,.framer-badge,[class*="Badge" i],[class*="badge" i],[data-framer-name*="Badge" i],[data-framer-name*="badge" i],[id*="badge" i],a[href*="framer.com"],a[href*="framer.website"],iframe[src*="framer.com"],iframe[src*="framer.website"]{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:fixed!important;left:-99999px!important;top:-99999px!important;width:0!important;height:0!important;z-index:-2147483648!important;clip-path:inset(100%)!important;}html,body{overflow:hidden!important;height:100vh!important;}</style>';
 
-</style>`;
-
-const KILL_JS = `<script>(function(){var S='a[href*="framer.com"],iframe[src*="framer.com"],[class*="Badge" i],[class*="badge" i],[data-framer-name*="Badge" i]';function k(r){try{r.querySelectorAll(S).forEach(function(n){if(n&&n.parentNode)n.parentNode.removeChild(n);});var a=r.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot)k(a[i].shadowRoot);}}catch(e){}}function b(){k(document);setInterval(function(){k(document);var ifs=document.getElementsByTagName('iframe');for(var i=0;i<ifs.length;i++){try{if(/(framer\\.com|framer\\.website)/i.test(ifs[i].src||'')){ifs[i].setAttribute('src','about:blank');ifs[i].parentNode&&ifs[i].parentNode.removeChild(ifs[i]);}}catch(e){}}},120);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',b);else b();})();</script>`;
+const KILL_JS = "<script>(function(){var S='a[href*=\"framer.com\"],iframe[src*=\"framer.com\"],[class*=\"Badge\" i],[class*=\"badge\" i],[data-framer-name*=\"Badge\" i]';function k(r){try{r.querySelectorAll(S).forEach(function(n){if(n&&n.parentNode)n.parentNode.removeChild(n);});var a=r.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot)k(a[i].shadowRoot);}}catch(e){}}function b(){k(document);setInterval(function(){k(document);var ifs=document.getElementsByTagName('iframe');for(var i=0;i<ifs.length;i++){try{if(/(framer\\.com|framer\\.website)/i.test(ifs[i].src||'')){ifs[i].setAttribute('src','about:blank');ifs[i].parentNode&&ifs[i].parentNode.removeChild(ifs[i]);}}catch(e){}}},120);}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',b);else b();})();</script>";
 
 async function proxy(req, res) {
   try {
     const sub = req.originalUrl === '/' ? '/' : req.originalUrl;
     const target = new URL(TARGET + sub);
-
     const upstream = await fetch(target, {
       headers: stripReqHeaders(req.headers, STRIP_REQ),
       redirect: 'follow',
     });
-
     const ct = upstream.headers.get('content-type') || '';
     const outHeaders = stripResHeaders(upstream.headers, STRIP_RES);
     if (!outHeaders['cache-control']) outHeaders['cache-control'] = 'public, max-age=30';
-
     if (ct.includes('text/html')) {
       let html = await upstream.text();
       for (const re of BADGE_PATTERNS) html = html.replace(re, '');
-      html = html.replace(/<\/head>/i, `${KILL_CSS}</head>`);
-      html = html.replace(/<\/body>/i, `${KILL_JS}</body>`);
+      html = html.replace(/<\/head>/i, KILL_CSS + '</head>');
+      html = html.replace(/<\/body>/i, KILL_JS + '</body>');
       return res.status(upstream.status).set(outHeaders).send(html);
     }
-
     const buf = Buffer.from(await upstream.arrayBuffer());
     return res.status(upstream.status).set(outHeaders).send(buf);
   } catch (e) {
