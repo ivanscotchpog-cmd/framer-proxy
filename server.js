@@ -65,7 +65,8 @@ function killJS() {
   setInterval(() => kill(document), 200);
 }
 
-app.get('/', async (req, res) => {
+app.get(/.*/, async (req, res) => {
+
   const sub = req.originalUrl === '/' ? '/' : req.originalUrl;
   const targetUrl = TARGET + sub;
   console.log('proxy ->', targetUrl);
@@ -92,3 +93,4 @@ app.get('/', async (req, res) => {
 app.get('/health', (req, res) => res.send('ok'));
 
 app.listen(PORT, () => console.log('Framer proxy on :' + PORT));
+app.use((req, res) => res.status(404).send('404'));
