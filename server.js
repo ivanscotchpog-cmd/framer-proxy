@@ -19,9 +19,6 @@ const STRIP_RES = [
   'x-frame-options','report-to','reporting-endpoints','nel',
 ];
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-           '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-
 function shouldStrip(name, list) {
   for (const p of list) {
     if (p.endsWith('-') ? name.startsWith(p) : p === name) return true;
@@ -29,10 +26,25 @@ function shouldStrip(name, list) {
   return false;
 }
 
-function clean(headers, list) {
-  const out = new Headers();
-  for (const [k, v] of headers) {
-    if (!shouldStrip(k.toLowerCase(), list)) out.set(k, v);
+function stripReqHeaders(obj, list) {
+  const out = {};
+  for (const k of Object.keys(obj || {})) {
+    if (!shouldStrip(k.toLowerCase(), list)) out[k] = obj[k];
+  }
+  return out;
+}
+
+function stripResHeaders(headers, list) {
+  const out = {};
+  if (!headers) return out;
+  if (typeof headers.forEach === 'function') {
+    headers.forEach((v, k) => {
+      if (!shouldStrip(k.toLowerCase(), list)) out[k] = v;
+    });
+    return out;
+  }
+  for (const [k, v] of Object.entries(headers)) {
+    if (!shouldStrip(k.toLowerCase(), list)) out[k] = v;
   }
   return out;
 }
@@ -55,28 +67,24 @@ async function proxy(req, res) {
     const target = new URL(TARGET + sub);
 
     const upstream = await fetch(target, {
-      headers: clean(req.headers, STRIP_REQ),
+      headers: stripReqHeaders(req.headers, STRIP_REQ),
       redirect: 'follow',
     });
 
     const ct = upstream.headers.get('content-type') || '';
-    const outHeaders = clean(upstream.headers, STRIP_RES);
-    if (!outHeaders.has('cache-control')) outHeaders.set('cache-control', 'public, max-age=30');
+    const outHeaders = stripResHeaders(upstream.headers, STRIP_RES);
+    if (!outHeaders['cache-control']) outHeaders['cache-control'] = 'public, max-age=30';
 
     if (ct.includes('text/html')) {
       let html = await upstream.text();
       for (const re of BADGE_PATTERNS) html = html.replace(re, '');
       html = html.replace(/<\/head>/i, `${KILL_CSS}</head>`);
       html = html.replace(/<\/body>/i, `${KILL_JS}</body>`);
-      const outH = {};
-      outHeaders.forEach((v, k) => { outH[k] = v; });
-      return res.status(upstream.status).set(outH).send(html);
+      return res.status(upstream.status).set(outHeaders).send(html);
     }
 
     const buf = Buffer.from(await upstream.arrayBuffer());
-    const outH = {};
-    outHeaders.forEach((v, k) => { outH[k] = v; });
-    return res.status(upstream.status).set(outH).send(buf);
+    return res.status(upstream.status).set(outHeaders).send(buf);
   } catch (e) {
     return res.status(502).send('Proxy error: ' + e.message);
   }
